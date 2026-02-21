@@ -32,6 +32,7 @@ int main()
     bool versusCP = true;   // true = joga contra Computador | false = 2 jogadores
     float velocidadeInicial = 5.0f;
     float tempoEspera = 0.0f;   // Delay antes da bola mexer
+    float tempo = 0.0f;
 
     // Bola
     Vector2 bolaPos = { largura/2, altura/2 };
@@ -201,7 +202,7 @@ int main()
         BeginDrawing();
         DrawRectangleGradientV(0, 0, largura, altura, DARKBLUE, BLACK);
 
-                // Fundo preto base
+        // Fundo preto base
         ClearBackground(BLACK);
 
         // Grade neon estilo retrô
@@ -214,6 +215,14 @@ int main()
         {
             DrawLine(0, j, largura, j, Fade(PURPLE, 0.15f));
         }
+
+        ClearBackground(BLACK);
+
+        for (int i = 0; i < largura; i++)
+        {
+            float wave = 20 * sinf(i * 0.01f + tempo);
+            DrawLine(i, altura/2 + wave, i, altura, Fade(DARKBLUE, 0.6f));
+        }       
 
         Camera2D camera = {0};
         camera.offset = shakeOffset;
