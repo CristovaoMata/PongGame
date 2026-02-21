@@ -2,13 +2,22 @@
 #include <math.h>
 
 #define MAX_TRAIL 20
+#define MAX_SCORE 5
+
+// Estados do jogo
+typedef enum {
+    MENU,          // Tela principal
+    MODE_SELECT,   // Escolher 1 jogador ou 2 jogadores
+    PLAYING,       // Jogo a decorrer
+    GAMEOVER       // Tela de vitória
+} GameState;
 
 int main()
 {
     const int largura = 800;
     const int altura = 450;
 
-    InitWindow(largura, altura, "PONG ARCADE");
+    InitWindow(largura, altura, "PONG MARIA PRO");
     InitAudioDevice();
     SetTargetFPS(60);
 
@@ -18,22 +27,25 @@ int main()
     Music music = LoadMusicStream("audio/music.mp3");
     PlayMusicStream(music);
 
+    // Variáveis principais
+    GameState state = MENU;
+    bool versusCP = true;   // true = joga contra Computador | false = 2 jogadores
+    float velocidadeInicial = 5.0f;
+    float tempoEspera = 0.0f;   // Delay antes da bola mexer
+
     // Bola
     Vector2 bolaPos = { largura/2, altura/2 };
     Vector2 bolaVel = { 5, 5 };
     float bolaRaio = 10;
 
-    // Rasto
     Vector2 trail[MAX_TRAIL] = {0};
 
     // Barras
     Rectangle player = { 30, altura/2 - 50, 10, 100 };
-    Rectangle enemy = { largura - 40, altura/2 - 50, 10, 100 };
+    Rectangle enemy  = { largura - 40, altura/2 - 50, 10, 100 };
 
     int playerScore = 0;
-    int enemyScore = 0;
-
-    bool gameOver = false;
+    int enemyScore  = 0;
 
     float flashTimer = 0;
     float shakeTimer = 0;
@@ -42,80 +54,140 @@ int main()
     {
         UpdateMusicStream(music);
 
-        if (!gameOver)
+        switch(state)
         {
-            // Movimento jogador
-            if (IsKeyDown(KEY_W)) player.y -= 6;
-            if (IsKeyDown(KEY_S)) player.y += 6;
+            // ===================== MENU =====================
+            case MENU:
+                if (IsKeyPressed(KEY_ENTER))
+                    state = MODE_SELECT;
 
-            if (player.y < 0) player.y = 0;
-            if (player.y + player.height > altura)
-                player.y = altura - player.height;
+                if (IsKeyPressed(KEY_ESCAPE))
+                    CloseWindow();
+            break;
 
-            // IA simples
-            if (enemy.y + enemy.height/2 < bolaPos.y) enemy.y += 5;
-            if (enemy.y + enemy.height/2 > bolaPos.y) enemy.y -= 5;
+            // ===================== ESCOLHER MODO =====================
+            case MODE_SELECT:
+                if (IsKeyPressed(KEY_ONE))
+                {
+                    versusCP = true;
+                    state = PLAYING;
+                }
+                if (IsKeyPressed(KEY_TWO))
+                {
+                    versusCP = false;
+                    state = PLAYING;
+                }
+            break;
 
-            // Atualizar rasto
-            for (int i = MAX_TRAIL-1; i > 0; i--)
-                trail[i] = trail[i-1];
-            trail[0] = bolaPos;
+            // ===================== JOGO =====================
+            case PLAYING:
 
-            // Movimento bola
-            bolaPos.x += bolaVel.x;
-            bolaPos.y += bolaVel.y;
+                // Movimento jogador 1
+                if (IsKeyDown(KEY_W)) player.y -= 6;
+                if (IsKeyDown(KEY_S)) player.y += 6;
 
-            if (bolaPos.y <= 0 || bolaPos.y >= altura)
-                bolaVel.y *= -1;
+                // Limites do jogador 1
+                if (player.y < 0) player.y = 0;
+                if (player.y + player.height > altura)
+                    player.y = altura - player.height;
 
-            // Colisão jogador
-            if (CheckCollisionCircleRec(bolaPos, bolaRaio, player))
-            {
-                bolaVel.x *= -1;
-                PlaySound(hit);
-                flashTimer = 0.1f;
-            }
+                // Se for Computador
+                if (versusCP)
+                {
+                    if (enemy.y + enemy.height/2 < bolaPos.y) enemy.y += 5;
+                    if (enemy.y + enemy.height/2 > bolaPos.y) enemy.y -= 5;
+                }
+                else // 2 jogadores
+                {
+                    //Movimento do Jogador 2
+                    if (IsKeyDown(KEY_UP)) enemy.y -= 6;
+                    if (IsKeyDown(KEY_DOWN)) enemy.y += 6;
 
-            // Colisão inimigo
-            if (CheckCollisionCircleRec(bolaPos, bolaRaio, enemy))
-            {
-                bolaVel.x *= -1;
-                PlaySound(hit);
-                flashTimer = 0.1f;
-            }
+                    // Limites do Jogador 2
+                    if (enemy.y < 0) enemy.y = 0;
+                    if (enemy.y + enemy.height > altura)
+                        enemy.y = altura - enemy.height;
+                }
 
-            // Pontuação
-            if (bolaPos.x < 0)
-            {
-                enemyScore++;
-                PlaySound(point);
-                bolaPos = (Vector2){ largura/2, altura/2 };
-                shakeTimer = 0.3f;
-            }
+                // Atualizar rasto
+                for (int i = MAX_TRAIL-1; i > 0; i--)
+                    trail[i] = trail[i-1];
+                trail[0] = bolaPos;
 
-            if (bolaPos.x > largura)
-            {
-                playerScore++;
-                PlaySound(point);
-                bolaPos = (Vector2){ largura/2, altura/2 };
-                shakeTimer = 0.3f;
-            }
+                // Movimento da bola
+                 if (tempoEspera <= 0)
+                {
+                    bolaPos.x += bolaVel.x;
+                    bolaPos.y += bolaVel.y;
+                }
+                else
+                {
+                    tempoEspera -= GetFrameTime();
+                }
 
-            if (playerScore == 5 || enemyScore == 5)
-                gameOver = true;
+                // Colisão topo/fundo
+                if (bolaPos.y <= 0 || bolaPos.y >= altura)
+                    bolaVel.y *= -1;
+
+                // Colisão com barras
+                if (CheckCollisionCircleRec(bolaPos, bolaRaio, player) ||
+                    CheckCollisionCircleRec(bolaPos, bolaRaio, enemy))
+                {
+                    bolaVel.x *= -1.05f;  // aumenta velocidade progressivamente
+                    PlaySound(hit);
+                    flashTimer = 0.1f;
+                }
+
+                // Pontuação Jogador 2
+                if (bolaPos.x < 0)
+                {
+                    enemyScore++;
+                    PlaySound(point);
+
+                    bolaPos = (Vector2){ largura/2, altura/2 };
+
+                    bolaVel.x = velocidadeInicial;  // Vai para direita (quem sofreu começa)
+                    bolaVel.y = GetRandomValue(-4,4);
+
+                    tempoEspera = 1.0f;  // 1 segundo parado
+                    shakeTimer = 0.3f;
+                }
+
+                // Pontuação Jogador 1 
+                if (bolaPos.x > largura)
+                {
+                    playerScore++;
+                    PlaySound(point);
+
+                    bolaPos = (Vector2){ largura/2, altura/2 };
+
+                    bolaVel.x = -velocidadeInicial; // Vai para esquerda
+                    bolaVel.y = GetRandomValue(-4,4);
+
+                    tempoEspera = 1.0f;
+                    shakeTimer = 0.3f;
+                }
+
+                // Verifica vitória
+                if (playerScore == MAX_SCORE || enemyScore == MAX_SCORE)
+                    state = GAMEOVER;
+
+            break;
+
+            // ===================== GAME OVER =====================
+            case GAMEOVER:
+                if (IsKeyPressed(KEY_R))
+                {
+                    playerScore = 0;
+                    enemyScore = 0;
+                    bolaVel = (Vector2){5,5};
+                    bolaPos = (Vector2){ largura/2, altura/2 };
+                    state = MENU;
+                }
+            break;
         }
-        else
-        {
-            if (IsKeyPressed(KEY_R))
-            {
-                playerScore = 0;
-                enemyScore = 0;
-                bolaPos = (Vector2){ largura/2, altura/2 };
-                gameOver = false;
-            }
-        }
 
-        // Atualizar timers
+        // Timers efeitos
         flashTimer -= GetFrameTime();
         shakeTimer -= GetFrameTime();
 
@@ -127,57 +199,92 @@ int main()
         }
 
         BeginDrawing();
+        DrawRectangleGradientV(0, 0, largura, altura, DARKBLUE, BLACK);
+
+                // Fundo preto base
         ClearBackground(BLACK);
+
+        // Grade neon estilo retrô
+        for (int i = 0; i < largura; i += 40)
+        {
+            DrawLine(i, 0, i, altura, Fade(PURPLE, 0.15f));
+        }
+
+        for (int j = 0; j < altura; j += 40)
+        {
+            DrawLine(0, j, largura, j, Fade(PURPLE, 0.15f));
+        }
 
         Camera2D camera = {0};
         camera.offset = shakeOffset;
-        camera.target = (Vector2){0, 0};
-        camera.rotation = 0.0f;
         camera.zoom = 1.0f;
 
         BeginMode2D(camera);
 
-        //Colocar sombras na bola
-        DrawCircleV(bolaPos, bolaRaio + 8, Fade(WHITE, 0.1f));
-        DrawCircleV(bolaPos, bolaRaio + 4, Fade(WHITE, 0.2f));
-            
+        // Linha central
+        for (int i = 0; i < altura; i += 20)
+            DrawRectangle(largura/2 - 2, i, 4, 10, Fade(WHITE, 0.4f));
 
-        //Colocar Rasto na bola
+        // Bola glow
+        DrawCircleV(bolaPos, bolaRaio + 6, Fade(WHITE, 0.2f));
+
+        // Rasto
         for (int i = 0; i < MAX_TRAIL; i++)
         {
-           
             float alpha = 1.0f - (float)i/MAX_TRAIL;
             DrawCircleV(trail[i], bolaRaio, Fade(WHITE, alpha));
         }
 
-        //Linha separadora
-        for (int i = 0; i < altura; i += 20)
-        {
-             DrawRectangle(largura/2 - 2, i, 4, 10, Fade(WHITE, 0.5f));
-        }   
-
-        //Desenha os jogadores
+        // Barras
         DrawRectangleRec(player, WHITE);
         DrawRectangleRec(enemy, WHITE);
 
-        //Desenha a Pontuação 
-        DrawText(TextFormat("%02d", playerScore), largura/4, 20, 60, GREEN);
-        DrawText(TextFormat("%02d", enemyScore), largura*3/4, 20, 60, WHITE);
+        // Pontuação
+        if(playerScore > enemyScore)
+        {
+            DrawText(TextFormat("%02d", playerScore), largura/4, 20, 60, GREEN);
+            DrawText(TextFormat("%02d", enemyScore), largura*3/4, 20, 60, RED);
+        }
+        else if(playerScore < enemyScore)
+        {
+            DrawText(TextFormat("%02d", playerScore), largura/4, 20, 60, RED);
+            DrawText(TextFormat("%02d", enemyScore), largura*3/4, 20, 60, GREEN);
+        }
+        else
+        {
+            DrawText(TextFormat("%02d", playerScore), largura/4, 20, 60, WHITE);
+            DrawText(TextFormat("%02d", enemyScore), largura*3/4, 20, 60, WHITE);
+        }
 
         EndMode2D();
 
-        // Flash
+        // Flash colisão
         if (flashTimer > 0)
             DrawRectangle(0, 0, largura, altura, Fade(WHITE, 0.3f));
 
-        if (gameOver)
+        // ===================== TELAS =====================
+        if (state == MENU)
         {
-            if (playerScore == 5)
-                DrawText("VOCE VENCEU!", largura/2 - 120, altura/2 - 20, 30, GREEN);
-            else
-                DrawText("VOCE PERDEU!", largura/2 - 120, altura/2 - 20, 30, RED);
+            DrawText("PONG MARIA Pro", largura/2 - 170, 120, 50, WHITE);
+            DrawText("ENTER - Jogar", largura/2 - 120, 200, 30, GREEN);
+            DrawText("ESC - Sair", largura/2 - 100, 240, 30, RED);
+        }
 
-            DrawText("Pressione R para reiniciar", largura/2 - 160, altura/2 + 20, 20, WHITE);
+        if (state == MODE_SELECT)
+        {
+            DrawText("Escolha o modo:", largura/2 - 150, 150, 30, WHITE);
+            DrawText("1 - Contra Computador", largura/2 - 170, 200, 25, GREEN);
+            DrawText("2 - Dois Jogadores", largura/2 - 150, 240, 25, SKYBLUE);
+        }
+
+        if (state == GAMEOVER)
+        {
+            if (playerScore == MAX_SCORE)
+                DrawText("JOGADOR 1 VENCEU!", largura/2 - 170, altura/2 - 20, 30, GREEN);
+            else
+                DrawText("JOGADOR 2 VENCEU!", largura/2 - 170, altura/2 - 20, 30, RED);
+
+            DrawText("Pressione R para voltar ao menu", largura/2 - 200, altura/2 + 20, 20, WHITE);
         }
 
         EndDrawing();
